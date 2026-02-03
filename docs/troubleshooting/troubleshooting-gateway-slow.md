@@ -257,4 +257,49 @@ openclaw logs --follow   # または clawdbot logs --follow
 
 ---
 
+## 追加事例：lane wait exceeded（2026-02-03 午後）
+
+**症状:**
+- マシン負荷は正常（Chrome暴走解消後）
+- それでも応答が8〜30秒遅れる
+- PING→PONGテストで取り違え（古い番号を返す）が発生
+
+**原因特定:**
+ログに `lane wait exceeded` が記録されていた：
+```
+[diagnostic] lane wait exceeded: lane=session:agent:main:discord:channel:XXXXX waitedMs=27240 queueAhead=2
+```
+
+**読み方:**
+- `lane=session:...` → セッション（LLM/処理）レーンで待ちが発生
+- `waitedMs=27240` → 27秒待ち
+- `queueAhead=2` → 前に2件処理が詰まっている
+
+**根本原因:**
+- 監視チャンネルが多すぎて、#mainにリクエストが集中
+- モデル応答待ちが重なり、キュー詰まりが発生
+- 「Discord受信」ではなく「セッション処理」側がボトルネック
+
+**解決策:**
+1. **監視チャンネルを最小限に絞る**（入力総量＝キュー発生源を減らす）
+2. **#mainは軽量モード**（短文・ツール禁止・サブエージェント禁止）
+3. **重い調査は個別チャンネルで**（作業専用chで消化）
+4. **チャンネル追加は1つずつ**（遅延出たら即ロールバック）
+
+**確認コマンド:**
+```bash
+# ログでlane wait exceededを確認
+grep "lane wait" ~/.openclaw/logs/gateway.err.log | tail -20
+
+# または
+grep "lane wait" ~/.clawdbot/logs/gateway.err.log | tail -20
+```
+
+**教訓:**
+- マシン負荷が正常でも「セッション処理」側で詰まることがある
+- `lane wait exceeded` はキュー詰まりの決定的証拠
+- 全チャンネル監視は理想だが、安定性優先なら絞る
+
+---
+
 *このドキュメントは白黒青トリオの協力で作成されました。*
