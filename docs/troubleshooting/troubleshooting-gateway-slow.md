@@ -2,13 +2,13 @@
 
 **作成日:** 2026-02-03  
 **作成者:** クロ🖤  
-**レビュー:** アオ🌊（依頼中）
+**レビュー:** アオ🌊 ✅
 
 ---
 
 ## 概要
 
-Gateway（Clawdbot/OpenClaw）の応答が遅い場合の原因特定と解決手順をまとめたノウハウ。
+Gateway（OpenClaw/Clawdbot）の応答が遅い場合の原因特定と解決手順をまとめたノウハウ。
 
 **発端:** 2026-02-03、シロ🤍（Mac mini M4）の応答速度が異常に遅かった問題を白黒青トリオで解決。
 
@@ -17,8 +17,10 @@ Gateway（Clawdbot/OpenClaw）の応答が遅い場合の原因特定と解決�
 ## 症状
 
 - AIアシスタントの返答が遅い（数秒〜十数秒かかる）
-- `clawdbot status` / `openclaw status` の `reachable` が高い（例：68ms vs 通常12ms）
+- `openclaw status` / `clawdbot status` の `reachable` が高い（例：68ms vs 通常12ms）
 - メッセージ処理に待ち時間が発生
+
+> ⚠️ **注意:** reachableの値だけで犯人確定しないこと。参考値として見つつ、モデル経路・CPU/メモリ負荷・リトライ状況を総合的に判断する。
 
 ---
 
@@ -52,7 +54,7 @@ top -b -n 1 | head -20
 ### Step 3: ログでリトライ/タイムアウト確認
 
 ```bash
-clawdbot logs --follow   # または openclaw logs --follow
+openclaw logs --follow   # または clawdbot logs --follow
 ```
 
 **探すキーワード:**
@@ -65,8 +67,8 @@ clawdbot logs --follow   # または openclaw logs --follow
 ### Step 4: 二重起動の確認
 
 ```bash
-ps aux | grep -i clawdbot | grep -v grep
 ps aux | grep -i openclaw | grep -v grep
+ps aux | grep -i clawdbot | grep -v grep
 ```
 
 複数のGatewayプロセスが動いていると遅くなる。
@@ -102,7 +104,16 @@ ps aux | grep -i openclaw | grep -v grep
 **対処:**
 1. 不要なアプリを終了
 2. マシン再起動（スワップリセット）
-3. `maxConcurrent` を下げる（2〜4）
+3. `maxConcurrent` を調整（下記参照）
+
+#### maxConcurrent の調整ガイドライン
+
+| メモリ状況 | 推奨設定 |
+|------------|----------|
+| **逼迫中**（空き < 500MB） | **下げる**（1〜2） |
+| **余裕あり**（空き > 2GB） | 適正値で運用（4〜8） |
+
+> ⚠️ メモリ逼迫時にmaxConcurrentを上げると、並列処理でさらにメモリを消費し**逆効果**になる。
 
 ### 3. 二重起動
 
@@ -113,8 +124,8 @@ ps aux | grep -i openclaw | grep -v grep
 **対処:**
 ```bash
 # 全部止めて再起動
-clawdbot gateway stop
-clawdbot gateway start
+openclaw gateway stop   # または clawdbot gateway stop
+openclaw gateway start  # または clawdbot gateway start
 ```
 
 ### 4. モデル経路の問題
@@ -130,6 +141,26 @@ clawdbot gateway start
 
 ---
 
+## 設定の落とし穴
+
+### チャンネル有効化のキー
+
+```yaml
+# ❌ 間違い
+allow: true
+
+# ✅ 正解
+enabled: true
+```
+
+> `allow: true` では監視が始まらない。ドキュメントにない落とし穴。
+
+### リソース競合の副作用
+
+CPU/メモリが限界に達すると、AIの「思考（推論）」以上に**「ツールの実行（ファイルの読み書き等）」のオーバーヘッド**が数秒〜数十秒単位で膨らむ。
+
+---
+
 ## 環境別の注意点
 
 ### Mac mini / サーバー機（常時稼働）
@@ -142,7 +173,7 @@ clawdbot gateway start
 
 ### MacBook Air / メイン端末（頻繁に使用）
 
-- **リスク:** 比較的低い（日常的に管理される）
+- **リスク:** 起きにくいが起きる（日常管理されるため蓄積しにくい）
 - **対策:** 
   - 重い作業後はアプリ整理
   - スリープ/再起動が自然に行われるので蓄積しにくい
@@ -160,9 +191,9 @@ clawdbot gateway start
 
 ```bash
 # Gateway状態
-clawdbot status
-clawdbot status --all
-clawdbot doctor --non-interactive
+openclaw status          # または clawdbot status
+openclaw status --all    # または clawdbot status --all
+openclaw doctor --non-interactive  # または clawdbot doctor --non-interactive
 
 # リソース確認（macOS）
 top -o cpu -n 10
@@ -177,12 +208,12 @@ free -h
 ping -c 3 127.0.0.1
 
 # プロセス確認
-ps aux | grep -i clawdbot
 ps aux | grep -i openclaw
+ps aux | grep -i clawdbot
 ps aux | grep -i chrome
 
 # ログ確認
-clawdbot logs --follow
+openclaw logs --follow   # または clawdbot logs --follow
 ```
 
 ---
@@ -217,7 +248,7 @@ clawdbot logs --follow
 
 ## チェックリスト（遅いと感じたら）
 
-- [ ] `clawdbot status` で reachable 確認（目安: 30ms以下）
+- [ ] `openclaw status` で reachable 確認（参考値、これだけで判断しない）
 - [ ] Load Average確認（CPUコア数以下が理想）
 - [ ] 空きメモリ確認（500MB以上欲しい）
 - [ ] Chrome/ブラウザのCPU/メモリ確認
